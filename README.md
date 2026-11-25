@@ -24,15 +24,18 @@ are read from `GRAPH_DIR`; this recipe does not generate them yet.
 
 ## Measured
 
-2026-11-25, TensorFold 1.3.4, four GB10s, 245,760-token context, 8 streams admitted, drafts MTP + copies (defaults),
-temperature 0, thinking off. Loaded in 101 s; 46.8 GiB of model a rank.
+2026-11-25, TensorFold 1.3.4, four GB10s, 245,760-token context, 8 streams admitted, temperature 0, thinking off. Loaded in 101 s; 46.8 GiB of model a rank.
 
-| | tokens per second |
-|---|---|
-| one stream: structured / code / prose | 96.6 / 79.4 / 64.5 |
-| four streams, aggregate: prose / code | 156.1 / 184.6 |
-| cold prompt, 8K to 128K tokens | about 1,780 |
+| tokens per second | MTP + copies (default) | DFlash2 + copies |
+|---|---|---|
+| one stream: structured / code / prose | 96.6 / 79.4 / 64.5 | 131.4 / 91.6 / 64.9 |
+| four streams, aggregate: prose / code | 156.1 / 184.6 | 177.2 / 228.2 |
+| cold prompt, 8K to 128K tokens | about 1,780 | about 1,480 |
+
+DFlash2 (`incoai/GLM-5.3-Flash-DFlash2` @ `bf582e4e`, `DRAFTER_DIR` in `site.env`, passed as `--drafter`) is the
+default here: faster replies on structured text and code, the same on prose, and cold prompts about 17% slower
+because the drafter reads the prompt too. Leave `DRAFTER_DIR` empty for the model's own MTP drafts.
 
 A plain question came back without reasoning text when thinking was off, and a tool call returned well-formed
-arguments. Not tried yet: the DFlash2 drafter (`--drafter`), `TF_GLM_DRAFT_CONFIDENCE`, the ring relay
+arguments. Not tried yet: `TF_GLM_DRAFT_CONFIDENCE`, the ring relay
 (`TF_GLM_ROCE_MULTI` with `TF_TP_ROCE_RELAY`), `TF_GLM_CHUNK_SOLO=4096`, an API key, a longer context.
