@@ -1,2 +1,3 @@
-site.env
 dist/
+extra.env
+site.env

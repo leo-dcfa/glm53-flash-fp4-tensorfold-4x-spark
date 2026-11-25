@@ -1,0 +1,57 @@
+# GLM-5.3-Flash FP4-Local on TensorFold's native engine: one rank of a four-node ring.
+# The same file runs on every node. RANK (0 on the head, 1..3 on the workers in ring order) and WORLD come from the
+# command line, everything else from site.env: `make up` starts the workers, then rank 0, in that order.
+name: glm53-fp4-tf
+
+services:
+  tensorfold:
+    container_name: glm53-fp4-tf
+    # Only supplies the CUDA 13 user libraries, NCCL 2.30.7 and rdma-core; the server is TensorFold's static binary.
+    image: nvcr.io/nvidia/pytorch:26.07-py3
+    entrypoint: /opt/tensorfold/bin/tensorfold-native
+    command: >-
+      serve /model --name ${SERVED_NAME} --host ${HOST} --port ${PORT} --context ${CONTEXT}
+      --drafter /drafter ${EXTRA_ARGS:-}
+    gpus: all
+    ipc: host
+    network_mode: host
+    shm_size: 16g
+    devices:
+      - /dev/infiniband:/dev/infiniband
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - ./dist/tensorfold:/opt/tensorfold:ro                      # the release `make prepare` checked and unpacked
+      - ${MODEL_DIR:?set MODEL_DIR in site.env}:/model:ro
+      - ${DRAFTER_DIR:?set DRAFTER_DIR in site.env}:/drafter:ro
+      - ${GRAPH_DIR:?set GRAPH_DIR in site.env}/nccl-graph-rank${RANK:-0}.xml:/nccl-graph.xml:ro
+    environment:
+      TF_GLM_RANK: ${RANK:-0}
+      TF_GLM_WORLD: ${WORLD:-4}
+      NCCL_COMM_ID: ${HEAD_ADDR}:29583
+      # Each node reaches only its two neighbours: gather prefill, a ring with a graph per rank, connections made as
+      # needed, and subnet-aware routing for links on separate /24s (TensorFold's GLM CUDA recipe, "More ranks").
+      TF_GLM_PREFILL_REDUCE: gather
+      NCCL_CUMEM_ENABLE: "1"
+      NCCL_RUNTIME_CONNECT: "1"
+      NCCL_ALGO: Ring
+      NCCL_GRAPH_FILE: /nccl-graph.xml
+      NCCL_SOCKET_IFNAME: ${SOCKET_IFNAME}
+      NCCL_IB_HCA: ${IB_HCA}
+      NCCL_IB_GID_INDEX: "3"
+      NCCL_IB_MERGE_NICS: "0"
+      NCCL_CROSS_NIC: "1"
+      NCCL_IB_SUBNET_AWARE_ROUTING: "1"
+      NCCL_IB_SUBNET_PREFIX_LEN: "24"
+      NCCL_P2P_DISABLE: "1"
+      NCCL_SHM_DISABLE: "1"
+      NCCL_MIN_NCHANNELS: "4"
+      NCCL_MAX_NCHANNELS: "4"
+      HF_HUB_OFFLINE: "1"
+    env_file:
+      - path: extra.env       # optional, git-ignored: more NAME=value settings, the same on every rank
+        required: false
+    restart: "no"

@@ -4,11 +4,25 @@ Serves NVIDIA's own mixed-precision checkpoint `nvidia/GLM-5.3-Flash-FP4-Local` 
 TensorFold's native engine at tensor parallel 4, one rank on each of four DGX Spark class machines (GB10) cabled as
 a ring with no switch.
 
+Two ways to run it, kept side by side for comparison. Both produce the same container on every rank (checked by
+creating rank 0 both ways and comparing image, command, environment, mounts, devices, limits and GPU request).
+
+| | Compose | Shell scripts |
+|---|---|---|
+| Files | `compose.yaml` (one rank, declarative) + `Makefile` (order and waiting) | `start.sh`, `stop.sh`, `prepare.sh` |
+| Prepare | `make prepare` | `./prepare.sh` |
+| Start / stop | `make up` / `make down` | `./start.sh` / `./stop.sh` |
+| See what will run | `make config` (rank 0's file, every value filled in) | `DRY_RUN=1 ./start.sh` |
+| Drafter | always DFlash2 (`DRAFTER_DIR` required) | DFlash2, or the model's MTP drafts with `DRAFTER_DIR` empty |
+| Extra environment | an optional `extra.env` file | `EXTRA_ENV` in `site.env` |
+| Needs | Docker Compose 2.30 or later (`gpus:`) | bash, ssh |
+
+Shared by both:
+
 - `config.sh`: pinned inputs. TensorFold 1.3.4's release archive is fetched from GitHub and checked by sha256.
-- `site.env` (git-ignored, from `site.env.example`): addresses, the model folder, port and context.
-- `./prepare.sh`: fetch and verify the release here, then copy this folder to every worker.
-- `./start.sh`: start the workers' ranks, then rank 0 here, and wait for the API (`DRY_RUN=1` prints the commands).
-- `./stop.sh`: remove the container on every node (exact name).
+- `site.env` (git-ignored, from `site.env.example`): addresses, the model and drafter folders, port and context.
+
+Run one way at a time: both name the container `glm53-fp4-tf` on every node.
 
 The server is TensorFold's static binary. It runs in NVIDIA's PyTorch container only for the CUDA 13 user libraries,
 NCCL 2.30.7 and rdma-core; nothing is built. Each rank mounts the release and the model read-only.
