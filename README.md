@@ -38,13 +38,30 @@ are read from `GRAPH_DIR`; this recipe does not generate them yet.
 
 ## Measured
 
-2026-11-25, TensorFold 1.3.4, four GB10s, 245,760-token context, 8 streams admitted, temperature 0, thinking off. Loaded in 101 s; 46.8 GiB of model a rank.
+2026-11-25, TensorFold 1.3.4, four GB10s, BF16 cache, 245,760-token context, 8 streams admitted, temperature 0, thinking off. Loaded in 101 s; 46.8 GiB of model a rank.
 
 | tokens per second | MTP + copies (default) | DFlash2 + copies |
 |---|---|---|
 | one stream: structured / code / prose | 96.6 / 79.4 / 64.5 | 131.4 / 91.6 / 64.9 |
 | four streams, aggregate: prose / code | 156.1 / 184.6 | 177.2 / 228.2 |
 | cold prompt, 8K to 128K tokens | about 1,780 | about 1,480 |
+
+### FP8 context cache and a 1M window (the default since 2026-11-25)
+
+`EXTRA_ARGS="--kv-cache fp8"` and `CONTEXT=1048576` in `site.env`, matching the EXL3 lane's FP8 cache and window. The
+engine then admits 7 streams at once, each with the whole 1,048,576-token window (6.96 GiB a stream a node), plus a
+5.4 GiB prompt cache. Same benchmark, DFlash2:
+
+| tokens per second | BF16 cache, 245,760 window | FP8 cache, 1,048,576 window |
+|---|---|---|
+| one stream: structured / code / prose | 131.4 / 91.6 / 64.9 | 131.6 / 92.6 / 66.2 |
+| four streams, aggregate: prose / code | 177.2 / 228.2 | 145.2 / 152.1 |
+| cold prompt, 8K to 224K tokens | about 1,480 | about 1,410 |
+
+A 673,777-token prompt with a six-digit code at 60% depth came back with the code (476 s, thinking off). Upstream
+marks the FP8 cache lossy (95.5% top-1 agreement with the BF16 cache in its two-node diagnostic). Four streams lose
+about a third of their throughput with it; for more parallel throughput and a shorter window, set
+`CONTEXT=245760` and `EXTRA_ARGS=""`.
 
 DFlash2 (`incoai/GLM-5.3-Flash-DFlash2` @ `bf582e4e`, `DRAFTER_DIR` in `site.env`, passed as `--drafter`) is the
 default here: faster replies on structured text and code, the same on prose, and cold prompts about 17% slower
